@@ -1,0 +1,43 @@
+#Text-to-Music
+# Installation of base libraries
+pip install transformers datasets soundfile tkinter
+
+# Install PyTorch (AI model run dependency, chosen according to system)
+#  Windows/Linux：
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+#  Mac：
+pip3 install torch torchvision torchaudio
+
+# Import the necessary libraries
+from transformers import AutoProcessor, MusicgenForConditionalGeneration
+import soundfile as sf
+import torch
+
+# Loading pre-trained models and processors
+processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
+model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+
+# Text instructions (can be modified, e.g., "joyful violin, 80 beats")
+text = "Sad piano melody, 120 beats per minute."
+
+# Processing Input Text
+inputs = processor(
+    text=[text], 
+    padding=True,
+    return_tensors="pt" 
+)
+
+# Generate Music
+audio_values = model.generate(
+    **inputs,
+    max_new_tokens=512,  
+    do_sample=True,
+    temperature=0.7  
+)
+
+# Extraction Sampling Rate
+sampling_rate = model.config.audio_encoder.sampling_rate
+
+# Save the generated audio as a WAV file
+sf.write("generated_music.wav", audio_values[0].numpy(), samplerate=sampling_rate)
+print("Music generation complete! Saved as generated_music.wav")
