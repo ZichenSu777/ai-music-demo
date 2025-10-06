@@ -1,0 +1,92 @@
+#interactive interface
+# Import all required librarie
+import os
+import numpy as np
+import wave
+import tkinter as tk
+from tkinter import ttk, filedialog
+from transformers import AutoProcessor, MusicgenForConditionalGeneration
+
+# Configure Chinese mirrors
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+
+# Initialising the TK interface
+root = tk.Tk()
+root.title("AI Music Generator")
+root.geometry("650x350")
+
+#Text input box (lets you enter a description of the music)
+input_label = ttk.Label(root, text=" Please enter a description of the music (example: light piano solo, 80 BPM, 30 seconds)：")
+input_label.pack(pady=15)  # 15 pixel spacing between top and bottom
+text_input = ttk.Entry(root, width=70, font=("Arial", 10)
+text_input.pack(pady=5)
+
+# Status tab (shows progress/results of generation)
+status_label = ttk.Label(root, text=" Ready to go, click the button below to start generating ", font=("Arial", 10))
+status_label.pack(pady=20)
+
+# Loading Models
+try:
+    status_label.config(text=" Loading models... (It will download the first time you run it, be patient)")
+    root.update()
+    # Load the smallest model（musicgen-small）,
+    processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
+    model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+    status_label.config(text="Model loaded and ready to go！")
+except Exception as e:
+    status_label.config(text=f" Model loading failure：{str(e)}", foreground="red")
+
+# Core Generation Functions
+def generate_music():
+    music_desc = text_input.get().strip()
+    if not music_desc:  # If nothing is entered, prompt the user
+        status_label.config(text=" Error: Please enter music description first！", foreground="red")
+        return
+
+    try:
+        # step1：Start generating audio
+        status_label.config(text=" Generating music... (about 30 seconds - 2 minutes, be patient)". foreground="orange")
+        root.update()  # Refresh the screen to show "Generating".
+        
+        inputs = processor(text=[music_desc], return_tensors="pt")
+        # Generate Audio（max_new_tokens=512）
+        audio_values = model.generate(**inputs, max_new_tokens=512)
+
+        # step2：Processing audio data
+        audio_data = audio_values[0].numpy()
+        audio_data = np.squeeze(audio_data)    # Remove useless dimensions (e.g. (1,1,16000) → (16000,))
+        audio_data = audio_data.T 
+      
+        max_val = np.max(np.abs(audio_data))
+        if max_val > 0: 
+            audio_data = audio_data / max_val
+        audio_data = (audio_data * 32767).astype(np.int16) 
+
+        #step3：Save file
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".wav", 
+            filetypes=[("WAV audio file (computer)", "*.wav"), ("All documents ", "*.*")],
+            title=" Select Save Location "
+        )
+        if not save_path: 
+            status_label.config(text=" Saved cancelled ", foreground="blue")
+            return
+        
+        with wave.open(save_path, 'wb') as wf:
+            wf.setnchannels(1) 
+            wf.setsampwidth(2) 
+            wf.setframerate(32000) 
+            wf.writeframes(audio_data.tobytes()) 
+
+        # Successful generation, prompting for results
+        status_label.config(text=f" Generated successfully! Save the file to：{save_path}", foreground="green")
+
+    except Exception as e:
+        status_label.config(text=f" Generation Failure：{str(e)}", foreground="red")
+
+# Add Generate button
+generate_btn = ttk.Button(root, text=" Start generating music ", command=generate_music, width=20)
+generate_btn.pack(pady=30)
+
+# the startup screen
+root.mainloop()
